@@ -51,12 +51,18 @@ def work_iteration(db):
                     adv_company['name']))
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
                 continue
-            ads_search_result = wb_requests.search_catalog_ads(
-                adv_company['query'])
-            # print(ads_search_result['adverts'])
-            # TODO брать свою ставку из базы
-            placement_response = wb_requests.get_placement(
-                adv_company['type'], adv_company['company_id'], adv_company['access_token'])
+            try:
+                ads_search_result = wb_requests.search_catalog_ads(
+                    adv_company['query'])
+                # print(ads_search_result['adverts'])
+                # TODO брать свою ставку из базы
+                placement_response = wb_requests.get_placement(
+                    adv_company['type'], adv_company['company_id'], adv_company['access_token'])
+            except Exception as e:
+                print('Http error: {}'.format(e))
+                db_facade.update_last_scan_ts(db, adv_company['company_id'])
+                print('skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
+                continue
 
             # TODO: Добавить обработку ошибок запросов wb
             adverts_array = ads_search_result['adverts']
