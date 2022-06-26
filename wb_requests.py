@@ -2,6 +2,7 @@ import requests
 from http import HTTPStatus
 import requests
 import urllib
+import time
 
 
 def __wb_headers_authenticated():
@@ -64,11 +65,22 @@ def get_placement(advert_type, campaign_id, access_token):
 def save_advert_campaign(advert_type, campaign_id, json_request_body, access_token):
     url = make_url(advert_type, campaign_id, 'save')
     print('send request: {}'.format(url))
-    r = requests.put(url, headers=__build_headers_with_auth(campaign_id, access_token), json=json_request_body)
-    r.raise_for_status()
+
+    RETRY_COUNT = 5 
+    RETRY_INTERVAL_SEC = 2
+    for attemption in range(1, RETRY_COUNT + 1):
+        try:
+            r = requests.put(url, headers=__build_headers_with_auth(campaign_id, access_token), json=json_request_body)
+            r.raise_for_status()
+            return
+        except Exception as e:
+            print('Save campaign. Http error: {}'.format(e))
+            print('{} attemption to retry... after {} sec'.format(attemption, RETRY_INTERVAL_SEC))
+            time.sleep(RETRY_INTERVAL_SEC)
+    print('Could not save advert campaign {} after {} attemtps'.format(campaign_id, RETRY_COUNT))
 
 
-# placement_json_response = get_placement('search', 1920749)
-# placement_json_response['place'][0]['price'] = 703
+# placement_json_response = get_placement('search', 1920749, cookie)
+# placement_json_response['place'][0]['price'] = 800
 # print(placement_json_response)
-# print(save_advert_campaign('search', 1920749, placement_json_response))
+# print(save_advert_campaign('search', 1920749, placement_json_response, cookie))
