@@ -29,15 +29,18 @@ def parse_arguments():
 
 
 def is_it_time_to_work(adv_company):
-    logger.debug('is_it_time_to_work. last_scan_ts: {} current_time: {}, interval_sec: {}'.format(adv_company['last_scan_ts'], datetime.datetime.now(), adv_company['scan_interval_sec']))
+    sec_to_start = adv_company['last_scan_ts'] + datetime.timedelta(
+            seconds=adv_company['scan_interval_sec']) - datetime.datetime.now()
+    logger.debug('is_it_time_to_work. last_scan_ts: {} current_time: {} interval_sec: {} sec_to_start: {}'
+    .format(adv_company['last_scan_ts'], datetime.datetime.now(), adv_company['scan_interval_sec'], sec_to_start))
     return adv_company['last_scan_ts'] in (None, '') or \
         (adv_company['last_scan_ts'] + datetime.timedelta(
             seconds=adv_company['scan_interval_sec'])) < datetime.datetime.now()
 
 
 def should_we_fuck_enemies(advert_first_place_id, own_company_id):
-    logger.info('advert_first_place_id: ', advert_first_place_id)
-    logger.info('own_company_id: ', own_company_id)
+    logger.info('advert_first_place_id: {}'.format(advert_first_place_id))
+    logger.info('own_company_id: {}'.format(own_company_id))
     return advert_first_place_id != own_company_id
 
 
