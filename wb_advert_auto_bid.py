@@ -6,6 +6,7 @@ import db_facade
 import wb_requests
 import logging
 import sys
+import pytz
 
 logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
@@ -29,13 +30,19 @@ def parse_arguments():
 
 
 def is_it_time_to_work(adv_company):
-    sec_to_start = adv_company['last_scan_ts'] + datetime.timedelta(
-            seconds=adv_company['scan_interval_sec']) - datetime.datetime.now()
+    if adv_company['last_scan_ts'] in (None, ''):
+        return True
+
+    tz = pytz.timezone('Europe/Moscow')
+    msk_now = datetime.datetime.now(tz=tz)
+    last_scan_ts = tz.localize(adv_company['last_scan_ts'], is_dst=None)
+
+    sec_to_start = last_scan_ts + datetime.timedelta(
+        seconds=adv_company['scan_interval_sec']) - msk_now
     logger.debug('is_it_time_to_work. last_scan_ts: {} current_time: {} interval_sec: {} sec_to_start: {}'
-    .format(adv_company['last_scan_ts'], datetime.datetime.now(), adv_company['scan_interval_sec'], sec_to_start))
-    return adv_company['last_scan_ts'] in (None, '') or \
-        (adv_company['last_scan_ts'] + datetime.timedelta(
-            seconds=adv_company['scan_interval_sec'])) < datetime.datetime.now()
+                 .format(last_scan_ts, msk_now, adv_company['scan_interval_sec'], sec_to_start))
+    return (last_scan_ts + datetime.timedelta(
+            seconds=adv_company['scan_interval_sec'])) < msk_now
 
 
 def should_we_fuck_enemies(advert_first_place_id, own_company_id):
@@ -71,7 +78,8 @@ def work_iteration(db):
             except Exception as e:
                 logger.info('Http error: {}'.format(e))
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
-                logger.info('skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
+                logger.info(
+                    'skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
                 continue
 
             # TODO: Добавить обработку ошибок запросов wb
