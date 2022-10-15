@@ -8,13 +8,16 @@ import time
 def __wb_headers_authenticated():
     headers = {
         "Cookie": "",
-        "Accept": "application/json, text/plain, */*",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
         "Accept-Encoding": "gzip, deflate, br",
-        "Host": "seller.wildberries.ru",
+        "Host": "cmp.wildberries.ru",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
         "Accept-Language": "en-us",
-        "Referer": "https://seller.wildberries.ru/cmp/campaigns/list/pause/edit/search/{campaign_id}",
-        "Connection": "keep-alive"
+        "Referer": "https://cmp.wildberries.ru/campaigns/list/pause/edit/search/{campaign_id}",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-store",
+        "X-User-Id": "19348319"
     }
     return headers
 
@@ -52,7 +55,8 @@ def search_catalog_ads(query_text):
 
 
 def make_url(advert_type, campaign_id, request_name):
-    return f'https://seller.wildberries.ru/ns/campaigns-api/ads/api/v2/{advert_type}/{campaign_id}/{request_name}'
+    return f'https://cmp.wildberries.ru/backend/api/v2/{advert_type}/{campaign_id}/{request_name}'
+
     
 
 def get_placement(advert_type, campaign_id, access_token):
