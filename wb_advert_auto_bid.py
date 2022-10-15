@@ -87,15 +87,19 @@ def work_iteration(db):
             if adverts_array is None:
                 logger.info('Empty adverts. Json: ', ads_search_result)
             else:
-                first_place_advert_id = adverts_array[0]['advertId']
+                # logger.debug('adverts_array: {}'.format(adverts_array))
+                second_place_advert_id = adverts_array[0]['advertId']
                 my_company_id = adv_company['company_id']
-                first_place_price = adverts_array[1]['cpm']
+                first_place_price = adverts_array[0]['cpm']
                 second_place_price = adverts_array[1]['cpm']
+                third_place_price = adverts_array[2]['cpm']
                 my_price = placement_response['place'][0]['price']
-                if should_we_fuck_enemies(first_place_advert_id, my_company_id):
-                    new_price = first_place_price + 1
-                    logger.info('current my price: {}, first_place_price: {}, set price to: {}'.format(
-                        my_price, first_place_price, new_price))
+                logger.debug('my_price: {} first_place_price: {} second_place_price: {} third_place_price: {} '.format(
+                    my_price, first_place_price, second_place_price, third_place_price))
+                if should_we_fuck_enemies(second_place_advert_id, my_company_id):
+                    new_price = second_place_price + 1
+                    logger.info('current my price: {}, second_place_price: {}, set price to: {}'.format(
+                        my_price, second_place_price, new_price))
                 elif should_we_reduce_bid(second_place_price, my_price):
                     new_price = second_place_price + 1
                     logger.info('current my price: {}, second_place_price: {}, set price to: {} '.format(
@@ -106,9 +110,11 @@ def work_iteration(db):
                         db, adv_company['company_id'])
                     continue
                 placement_response['place'][0]['price'] = new_price
-                wb_requests.save_advert_campaign(
-                    adv_company['type'], adv_company['company_id'], placement_response, adv_company['access_token'])
-                logger.info('campaign "{}" saved!'.format(adv_company['name']))
+                if my_price != new_price:
+                    wb_requests.save_advert_campaign(
+                        adv_company['type'], adv_company['company_id'], placement_response, adv_company['access_token'])
+                    logger.info('campaign "{}" saved!'.format(
+                        adv_company['name']))
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
 
 
