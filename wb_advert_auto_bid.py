@@ -12,7 +12,7 @@ logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(stream=sys.stdout)
 logger.addHandler(handler)
-
+error_counter = 0
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -57,6 +57,8 @@ def should_we_reduce_bid(second_place_price, own_price):
 
 def work_iteration(db):
     adv_companies = db_facade.get_adv_companies(db)
+    if len(adv_companies) == 0:
+        logger.debug('nothing to do')
 
     for adv_company in adv_companies:
         # если текущее время больше last_scan_ts + scan_interval_sec,
@@ -74,10 +76,14 @@ def work_iteration(db):
                 # logger.info(ads_search_result['adverts'])
                 # TODO брать свою ставку из базы
                 placement_response = wb_requests.get_placement(
-                    adv_company['type'], adv_company['company_id'], adv_company['access_token'])
+                    adv_company['type'], adv_company['company_id'], 
+                    adv_company['access_token'], adv_company['x_user_id'])
             except Exception as e:
-                logger.info('Http error: {}'.format(e))
+                global error_counter
+                error_counter += 1
+                logger.info('{} Http error: {}'.format(error_counter, e))
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
+                
                 logger.info(
                     'skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
                 continue
@@ -112,13 +118,15 @@ def work_iteration(db):
                 placement_response['place'][0]['price'] = new_price
                 if my_price != new_price:
                     wb_requests.save_advert_campaign(
-                        adv_company['type'], adv_company['company_id'], placement_response, adv_company['access_token'])
+                        adv_company['type'], adv_company['company_id'], placement_response, 
+                        adv_company['access_token'], adv_company['x_user_id'])
                     logger.info('campaign "{}" saved!'.format(
                         adv_company['name']))
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
 
 
 def main():
+    logger.info('Service starting...')
     args = parse_arguments()
     db = db_facade.connect(args)
 
