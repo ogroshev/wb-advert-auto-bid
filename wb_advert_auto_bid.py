@@ -90,7 +90,7 @@ def work_iteration(db):
 
             # TODO: Добавить обработку ошибок запросов wb
             adverts_array = ads_search_result['adverts']
-            # logger.info('adverts_array: {}'.format(adverts_array))
+            logger.info('adverts_array[:3]: {}'.format(adverts_array[:3]))
             if adverts_array is None:
                 logger.info('Empty adverts. Json: ', ads_search_result)
             else:
