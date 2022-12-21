@@ -21,7 +21,7 @@ def get_adv_companies(db):
         "    query,                 " 
         "    ac.name,                  " 
         "    type,                  " 
-        "    access_token,           " 
+        "    cpm_cookies,           " 
         "    x_user_id           " 
         "FROM advert_company ac     " 
         "JOIN sellers s ON ac.id_seller = s.id "

@@ -60,14 +60,16 @@ def make_url(advert_type, campaign_id, request_name):
 
     
 
-def get_placement(advert_type, campaign_id, access_token, x_user_id):
+def get_placement(advert_type, campaign_id, cpm_cookies, x_user_id):
     url = make_url(advert_type, campaign_id, 'placement')
-    r = requests.get(url, headers=__build_headers_with_auth(campaign_id, access_token, x_user_id))
+    print('send request: {}'.format(url))
+    r = requests.get(url, headers=__build_headers_with_auth(campaign_id, cpm_cookies, x_user_id))
+    print('response code: {}'.format(r.status_code))
     r.raise_for_status()
     return r.json()
 
 
-def save_advert_campaign(advert_type, campaign_id, json_request_body, access_token, x_user_id):
+def save_advert_campaign(advert_type, campaign_id, json_request_body, cpm_cookies, x_user_id):
     url = make_url(advert_type, campaign_id, 'save')
     print('send request: {}'.format(url))
 
@@ -75,7 +77,7 @@ def save_advert_campaign(advert_type, campaign_id, json_request_body, access_tok
     RETRY_INTERVAL_SEC = 2
     for attemption in range(1, RETRY_COUNT + 1):
         try:
-            r = requests.put(url, headers=__build_headers_with_auth(campaign_id, access_token, x_user_id), json=json_request_body)
+            r = requests.put(url, headers=__build_headers_with_auth(campaign_id, cpm_cookies, x_user_id), json=json_request_body)
             r.raise_for_status()
             return
         except Exception as e:

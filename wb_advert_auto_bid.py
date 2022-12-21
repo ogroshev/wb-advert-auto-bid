@@ -45,14 +45,14 @@ def is_it_time_to_work(adv_company):
             seconds=adv_company['scan_interval_sec'])) < msk_now
 
 
-def should_we_fuck_enemies(advert_first_place_id, own_company_id):
-    logger.info('advert_first_place_id: {}'.format(advert_first_place_id))
+def is_target_place_ours(target_place_id, own_company_id):
+    logger.info('target_place_id: {}'.format(target_place_id))
     logger.info('own_company_id: {}'.format(own_company_id))
-    return advert_first_place_id != own_company_id
+    return target_place_id == own_company_id
 
 
-def should_we_reduce_bid(second_place_price, own_price):
-    return own_price > second_place_price + 1
+def should_we_reduce_bid(target_place_price, own_price):
+    return own_price > target_place_price + 1
 
 
 def work_iteration(db):
@@ -77,7 +77,7 @@ def work_iteration(db):
                 # TODO брать свою ставку из базы
                 placement_response = wb_requests.get_placement(
                     adv_company['type'], adv_company['company_id'], 
-                    adv_company['access_token'], adv_company['x_user_id'])
+                    adv_company['cpm_cookies'], adv_company['x_user_id'])
             except Exception as e:
                 global error_counter
                 error_counter += 1
@@ -90,38 +90,41 @@ def work_iteration(db):
 
             # TODO: Добавить обработку ошибок запросов wb
             adverts_array = ads_search_result['adverts']
+            logger.info('adverts_array: {}'.format(adverts_array))
             if adverts_array is None:
                 logger.info('Empty adverts. Json: ', ads_search_result)
             else:
                 # logger.debug('adverts_array: {}'.format(adverts_array))
-                second_place_advert_id = adverts_array[0]['advertId']
+                second_place_advert_id = adverts_array[1]['advertId']
                 my_company_id = adv_company['company_id']
                 first_place_price = adverts_array[0]['cpm']
                 second_place_price = adverts_array[1]['cpm']
                 third_place_price = adverts_array[2]['cpm']
                 my_price = placement_response['place'][0]['price']
+
                 logger.debug('my_price: {} first_place_price: {} second_place_price: {} third_place_price: {} '.format(
                     my_price, first_place_price, second_place_price, third_place_price))
-                if should_we_fuck_enemies(second_place_advert_id, my_company_id):
+                new_price = my_price
+                if is_target_place_ours(second_place_advert_id, my_company_id):
+                    logger.info('already second place')
+                    if should_we_reduce_bid(second_place_price, my_price):
+                        new_price = second_place_price + 1
+                        logger.info('redusing bid. current my price: {}, second_place_price: {}, target price: {} '.format(
+                            my_price, second_place_price, new_price))
+                else: 
                     new_price = second_place_price + 1
-                    logger.info('current my price: {}, second_place_price: {}, set price to: {}'.format(
+                    logger.info('change bid. current my price: {}, second_place_price: {}, target price: {}'.format(
                         my_price, second_place_price, new_price))
-                elif should_we_reduce_bid(second_place_price, my_price):
-                    new_price = second_place_price + 1
-                    logger.info('current my price: {}, second_place_price: {}, set price to: {} '.format(
-                        my_price, second_place_price, new_price))
-                else:
-                    logger.info('already best price and place')
-                    db_facade.update_last_scan_ts(
-                        db, adv_company['company_id'])
-                    continue
-                placement_response['place'][0]['price'] = new_price
+
                 if my_price != new_price:
+                    placement_response['place'][0]['price'] = new_price
                     wb_requests.save_advert_campaign(
                         adv_company['type'], adv_company['company_id'], placement_response, 
-                        adv_company['access_token'], adv_company['x_user_id'])
+                        adv_company['cpm_cookies'], adv_company['x_user_id'])
                     logger.info('campaign "{}" saved!'.format(
                         adv_company['name']))
+                else:
+                    logger.info('already best price and place')
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
 
 
