@@ -15,7 +15,8 @@ def get_adv_companies(db):
     cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cursor.execute(
         "SELECT ac.id as company_id,   " 
-        "    max_bet,               " 
+        "    max_bet,               "
+        "    target_place,          " 
         "    last_scan_ts,          " 
         "    scan_interval_sec,     " 
         "    query,                 " 

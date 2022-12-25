@@ -4,6 +4,8 @@ import time
 
 import db_facade
 import wb_requests
+import choosing_bid as cb
+
 import logging
 import sys
 import pytz
@@ -13,6 +15,7 @@ logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(stream=sys.stdout)
 logger.addHandler(handler)
 error_counter = 0
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -55,6 +58,15 @@ def should_we_reduce_bid(target_place_price, own_price):
     return own_price > target_place_price + 1
 
 
+def search_my_place(adverts_array, my_company_id):
+    my_place = 0
+    for idx in range(len(adverts_array)):
+        if adverts_array[idx]['advertId'] == my_company_id:
+            my_place = idx + 1
+            break
+    return my_place
+
+
 def work_iteration(db):
     adv_companies = db_facade.get_adv_companies(db)
     if len(adv_companies) == 0:
@@ -73,56 +85,48 @@ def work_iteration(db):
             try:
                 ads_search_result = wb_requests.search_catalog_ads(
                     adv_company['query'])
-                # logger.info(ads_search_result['adverts'])
-                # TODO брать свою ставку из базы
+                adverts_array = ads_search_result['adverts']
+                logger.info('adverts_array[:3]: {}'.format(adverts_array[:3]))
                 placement_response = wb_requests.get_placement(
-                    adv_company['type'], adv_company['company_id'], 
+                    adv_company['type'], adv_company['company_id'],
                     adv_company['cpm_cookies'], adv_company['x_user_id'])
             except Exception as e:
                 global error_counter
                 error_counter += 1
                 logger.info('{} Http error: {}'.format(error_counter, e))
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
-                
+
                 logger.info(
                     'skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
                 continue
 
-            # TODO: Добавить обработку ошибок запросов wb
-            adverts_array = ads_search_result['adverts']
-            logger.info('adverts_array[:3]: {}'.format(adverts_array[:3]))
             if adverts_array is None:
                 logger.info('Empty adverts. Json: ', ads_search_result)
             else:
-                # logger.debug('adverts_array: {}'.format(adverts_array))
-                second_place_advert_id = adverts_array[1]['advertId']
-                my_company_id = adv_company['company_id']
-                first_place_price = adverts_array[0]['cpm']
-                second_place_price = adverts_array[1]['cpm']
-                third_place_price = adverts_array[2]['cpm']
+                target_place = adv_company['target_place']
                 my_price = placement_response['place'][0]['price']
+                my_company_id = adv_company['company_id']
+                my_place = search_my_place(adverts_array, my_company_id)
 
-                logger.debug('my_price: {} first_place_price: {} second_place_price: {} third_place_price: {} '.format(
-                    my_price, first_place_price, second_place_price, third_place_price))
-                new_price = my_price
-                if is_target_place_ours(second_place_advert_id, my_company_id):
-                    logger.info('already second place')
-                    if should_we_reduce_bid(second_place_price, my_price):
-                        new_price = second_place_price + 1
-                        logger.info('redusing bid. current my price: {}, second_place_price: {}, target price: {} '.format(
-                            my_price, second_place_price, new_price))
-                else: 
-                    new_price = second_place_price + 1
-                    logger.info('change bid. current my price: {}, second_place_price: {}, target price: {}'.format(
-                        my_price, second_place_price, new_price))
+                logger.debug('my_price: {} my_place: {} target_place: {}'.format(
+                    my_price, my_place, target_place))
 
-                if my_price != new_price:
-                    placement_response['place'][0]['price'] = new_price
-                    wb_requests.save_advert_campaign(
-                        adv_company['type'], adv_company['company_id'], placement_response, 
-                        adv_company['cpm_cookies'], adv_company['x_user_id'])
-                    logger.info('campaign "{}" saved!'.format(
-                        adv_company['name']))
+                advert_info = cb.AdvertInfo()
+                advert_info.fromAdverts(adverts_array)
+                decision = cb.calcBestPrice(
+                    advert_info, my_place, my_price, target_place)
+
+                if decision.changePriceNeeded:
+                    if decision.targetPrice > adv_company['max_bet']:
+                        logger.info('targetPrice: {} max_bet: {}. Skip...'.format(
+                            decision.targetPrice, adv_company['max_bet']))
+                    else:
+                        placement_response['place'][0]['price'] = decision.targetPrice
+                        wb_requests.save_advert_campaign(
+                            adv_company['type'], adv_company['company_id'], placement_response,
+                            adv_company['cpm_cookies'], adv_company['x_user_id'])
+                        logger.info('campaign "{}" saved! New price: {}'.format(
+                            adv_company['name'], decision.targetPrice))
                 else:
                     logger.info('already best price and place')
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
