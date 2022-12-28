@@ -42,8 +42,6 @@ def is_it_time_to_work(adv_company):
 
     sec_to_start = last_scan_ts + datetime.timedelta(
         seconds=adv_company['scan_interval_sec']) - msk_now
-    logger.debug('is_it_time_to_work. last_scan_ts: {} current_time: {} interval_sec: {} sec_to_start: {}'
-                 .format(last_scan_ts, msk_now, adv_company['scan_interval_sec'], sec_to_start))
     return (last_scan_ts + datetime.timedelta(
             seconds=adv_company['scan_interval_sec'])) < msk_now
 
@@ -65,7 +63,7 @@ def search_my_place(adverts_array, my_company_id):
             my_place = idx + 1
             break
     return my_place
-
+    
 
 def work_iteration(db):
     adv_companies = db_facade.get_adv_companies(db)
