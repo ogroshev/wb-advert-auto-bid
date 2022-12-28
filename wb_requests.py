@@ -9,7 +9,7 @@ def __wb_headers_authenticated():
     headers = {
         "Cookie": "",
         "Accept": "application/json",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json, charset=utf-8",
         "Accept-Encoding": "gzip, deflate, br",
         "Host": "cmp.wildberries.ru",
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Safari/605.1.15",
@@ -63,7 +63,9 @@ def make_url(advert_type, campaign_id, request_name):
 def get_placement(advert_type, campaign_id, cpm_cookies, x_user_id):
     url = make_url(advert_type, campaign_id, 'placement')
     print('send request: {}'.format(url))
-    r = requests.get(url, headers=__build_headers_with_auth(campaign_id, cpm_cookies, x_user_id))
+    headers = __build_headers_with_auth(campaign_id, cpm_cookies, x_user_id)
+    print('headers: {}'.format(headers))
+    r = requests.get(url, headers=headers)
     print('response code: {}'.format(r.status_code))
     r.raise_for_status()
     return r.json()
@@ -72,6 +74,8 @@ def get_placement(advert_type, campaign_id, cpm_cookies, x_user_id):
 def save_advert_campaign(advert_type, campaign_id, json_request_body, cpm_cookies, x_user_id):
     url = make_url(advert_type, campaign_id, 'save')
     print('send request: {}'.format(url))
+    result_code = 200
+    error_str = None
 
     RETRY_COUNT = 5 
     RETRY_INTERVAL_SEC = 2
@@ -79,12 +83,16 @@ def save_advert_campaign(advert_type, campaign_id, json_request_body, cpm_cookie
         try:
             r = requests.put(url, headers=__build_headers_with_auth(campaign_id, cpm_cookies, x_user_id), json=json_request_body)
             r.raise_for_status()
-            return
-        except Exception as e:
+            return (True, r.status_code, None)
+        except requests.exceptions.HTTPError as e:
             print('Save campaign. Http error: {}'.format(e))
             print('{} attemption to retry... after {} sec'.format(attemption, RETRY_INTERVAL_SEC))
             time.sleep(RETRY_INTERVAL_SEC)
+            result_code = e.response.status_code
+            error_str = '{}'.format(e)
+
     print('Could not save advert campaign {} after {} attemtps'.format(campaign_id, RETRY_COUNT))
+    return (False, result_code, error_str)
 
 
 # placement_json_response = get_placement('search', 1920749, cookie)

@@ -9,6 +9,7 @@ import choosing_bid as cb
 import logging
 import sys
 import pytz
+import requests
 
 logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
@@ -63,7 +64,35 @@ def search_my_place(adverts_array, my_company_id):
             my_place = idx + 1
             break
     return my_place
-    
+
+
+def get_advert_info(adv_company):
+    result_code = 200
+    error_str = None
+    try:
+        ads_search_result = wb_requests.search_catalog_ads(
+            adv_company['query'])
+        adverts_array = ads_search_result['adverts']
+        logger.info('adverts_array[:3]: {}'.format(
+            ads_search_result['adverts'][:3]))
+        placement_response = wb_requests.get_placement(
+            adv_company['type'], adv_company['company_id'],
+            adv_company['cpm_cookies'], adv_company['x_user_id'])
+        if adverts_array is not None:
+            return (True, adverts_array, placement_response, result_code, error_str)
+        else:
+            logger.info('Empty adverts. Json: ', ads_search_result)
+            result_code = 500
+    except requests.exceptions.HTTPError as e:
+        global error_counter
+        error_counter += 1
+        logger.info('{} Http error: {}'.format(error_counter, e))
+        logger.info(
+            'skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
+        result_code = e.response.status_code
+        error_str = '{}'.format(e)
+    return (False, None, None, result_code, error_str)
+
 
 def work_iteration(db):
     adv_companies = db_facade.get_adv_companies(db)
@@ -80,27 +109,16 @@ def work_iteration(db):
                     adv_company['name']))
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
                 continue
-            try:
-                ads_search_result = wb_requests.search_catalog_ads(
-                    adv_company['query'])
-                adverts_array = ads_search_result['adverts']
-                logger.info('adverts_array[:3]: {}'.format(adverts_array[:3]))
-                placement_response = wb_requests.get_placement(
-                    adv_company['type'], adv_company['company_id'],
-                    adv_company['cpm_cookies'], adv_company['x_user_id'])
-            except Exception as e:
-                global error_counter
-                error_counter += 1
-                logger.info('{} Http error: {}'.format(error_counter, e))
-                db_facade.update_last_scan_ts(db, adv_company['company_id'])
 
-                logger.info(
-                    'skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
-                continue
+            ok, adverts_array, placement_response, result_code, error_str = get_advert_info(
+                adv_company)
 
-            if adverts_array is None:
-                logger.info('Empty adverts. Json: ', ads_search_result)
-            else:
+            my_price = None
+            my_place = None
+            target_price = None
+            target_place = None
+            decision_str = None
+            if ok:
                 target_place = adv_company['target_place']
                 my_price = placement_response['place'][0]['price']
                 my_company_id = adv_company['company_id']
@@ -115,19 +133,31 @@ def work_iteration(db):
                     advert_info, my_place, my_price, target_place)
 
                 if decision.changePriceNeeded:
+                    target_price = decision.targetPrice
                     if decision.targetPrice > adv_company['max_bet']:
                         logger.info('targetPrice: {} max_bet: {}. Skip...'.format(
-                            decision.targetPrice, adv_company['max_bet']))
+                            target_price, adv_company['max_bet']))
+                        decision_str = 'max bet'
                     else:
+                        decision_str = 'change bet'
                         placement_response['place'][0]['price'] = decision.targetPrice
-                        wb_requests.save_advert_campaign(
+                        ok, result_code, error_str = wb_requests.save_advert_campaign(
                             adv_company['type'], adv_company['company_id'], placement_response,
                             adv_company['cpm_cookies'], adv_company['x_user_id'])
-                        logger.info('campaign "{}" saved! New price: {}'.format(
-                            adv_company['name'], decision.targetPrice))
+                        if ok:
+                            logger.info('campaign "{}" saved! New price: {}'.format(
+                                adv_company['name'], target_price))
+                        else:
+                            logger.warn('could not save campaign: {} - {}',
+                                        adv_company['company_id'], adv_company['name'])
+
                 else:
                     logger.info('already best price and place')
+                    decision_str = 'no changes'
+            db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
+                                     target_price, target_place, decision_str, result_code, error_str)
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
+        time.sleep(1)
 
 
 def main():
