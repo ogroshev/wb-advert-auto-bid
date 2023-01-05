@@ -43,7 +43,7 @@ def calcBestPrice(advert_info: AdvertInfo,
                     current_place:  int, 
                     current_price: int, 
                     target_place: int) -> Decision:
-    MIN_BID = 5
+    MIN_BID = 50
     d = Decision(False, 0)
 
     if current_place == target_place:
