@@ -5,6 +5,7 @@ import time
 import db_facade
 import wb_requests
 import choosing_bid as cb
+import json
 
 import logging
 import sys
@@ -154,8 +155,10 @@ def work_iteration(db):
                 else:
                     logger.info('already best price and place')
                     decision_str = 'no changes'
+
+            json_adverts_array_first_five = json.dumps(adverts_array[:4])
             db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
-                                     target_price, target_place, decision_str, result_code, error_str)
+                                     target_price, target_place, decision_str, result_code, error_str, json_adverts_array_first_five)
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
         time.sleep(1)
 
