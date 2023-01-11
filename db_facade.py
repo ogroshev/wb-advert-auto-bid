@@ -37,7 +37,8 @@ def update_last_scan_ts(db, company_id):
     cursor.execute(update_query)
 
 
-def log_advert_bid(db, company_id, current_price, current_place, target_price, target_place, decision, result_code, error_str, json_adverts):
+def log_advert_bid(db, company_id, current_price, current_place, target_price, target_place, decision, 
+                    result_code, error_str, json_adverts, json_priority_subjects):
     cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     insert_query = f'''
     INSERT INTO advert_company_log (advert_company_id,
@@ -48,8 +49,9 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                     decision,
                                     result_code,
                                     error_str,
-                                    json_adverts)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    json_adverts,
+                                    json_priority_subjects)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     '''
     cursor.execute(insert_query, (company_id,
                                   current_price,
@@ -59,4 +61,5 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                   decision,
                                   result_code,
                                   error_str,
-                                  json_adverts))
+                                  json_adverts,
+                                  json_priority_subjects))

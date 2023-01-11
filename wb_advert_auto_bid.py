@@ -73,14 +73,17 @@ def get_advert_info(adv_company):
     try:
         ads_search_result = wb_requests.search_catalog_ads(
             adv_company['query'])
+        priority_subjects = ads_search_result['prioritySubjects']
         adverts_array = ads_search_result['adverts']
         logger.info('adverts_array[:3]: {}'.format(
             ads_search_result['adverts'][:3]))
+        logger.info('priority_subjects[]: {}'.format(
+            priority_subjects))
         placement_response = wb_requests.get_placement(
             adv_company['type'], adv_company['company_id'],
             adv_company['cpm_cookies'], adv_company['x_user_id'])
         if adverts_array is not None:
-            return (True, adverts_array, placement_response, result_code, error_str)
+            return (True, adverts_array, priority_subjects, placement_response, result_code, error_str)
         else:
             logger.info('Empty adverts. Json: ', ads_search_result)
             result_code = 500
@@ -111,7 +114,7 @@ def work_iteration(db):
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
                 continue
 
-            ok, adverts_array, placement_response, result_code, error_str = get_advert_info(
+            ok, adverts_array, priority_subjects, placement_response, result_code, error_str = get_advert_info(
                 adv_company)
 
             my_price = None
@@ -157,8 +160,10 @@ def work_iteration(db):
                     decision_str = 'no changes'
 
             json_adverts_array_first_five = json.dumps(adverts_array[:4])
+            json_priority_subjects = json.dumps(priority_subjects)
             db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
-                                     target_price, target_place, decision_str, result_code, error_str, json_adverts_array_first_five)
+                                     target_price, target_place, decision_str, result_code, 
+                                     error_str, json_adverts_array_first_five, json_priority_subjects)
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
         time.sleep(1)
 
