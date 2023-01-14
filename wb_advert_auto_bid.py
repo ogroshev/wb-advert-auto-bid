@@ -83,6 +83,7 @@ def get_advert_info(adv_company):
         if adverts_array is not None:
             logger.info('adverts_array[:3]: {}'.format(
                 ads_search_result['adverts'][:3]))
+            # logger.info('placement_response: {}'.format(placement_response))
             return (True, adverts_array, priority_subjects, placement_response, result_code, error_str)
         else:
             logger.info('Empty adverts. Json: ', ads_search_result)
@@ -90,12 +91,10 @@ def get_advert_info(adv_company):
     except requests.exceptions.HTTPError as e:
         global error_counter
         error_counter += 1
-        logger.info('{} Http error: {}'.format(error_counter, e))
-        logger.info(
-            'skip {} - {}'.format(adv_company['company_id'], adv_company['name']))
+        logger.info('{} Http error: {} skip {} - {}'.format(error_counter, e, adv_company['company_id'], adv_company['name']))
         result_code = e.response.status_code
         error_str = '{}'.format(e)
-    return (False, None, None, result_code, error_str)
+    return (False, None, None, None, result_code, error_str)
 
 
 def work_iteration(db):
@@ -127,6 +126,15 @@ def work_iteration(db):
                 my_price = placement_response['place'][0]['price']
                 my_subject_id = placement_response['place'][0]['subjectId']
                 my_company_id = adv_company['company_id']
+
+                if priority_subjects is not None and my_subject_id != priority_subjects[0]:
+                    error_str = "priority_subjects[0]: {} not equal placement's subject_id: {}".format(
+                        priority_subjects[0], my_subject_id)
+                    db_facade.alarm(db, adv_company['company_id'], error_str)
+                    logger.warning("Company: {} skipped. Alarm: {}".format(adv_company['company_id'], error_str))
+                    db_facade.update_last_scan_ts(db, adv_company['company_id'])
+                    continue
+
                 my_place = search_my_place(adverts_array, my_company_id)
 
                 logger.debug('my_price: {} my_place: {} target_place: {} my_subject_id: {}'.format(
@@ -134,7 +142,8 @@ def work_iteration(db):
 
                 advert_info = cb.AdvertInfo()
                 advert_info.fromAdverts(adverts_array, my_subject_id)
-                logger.info('Adverts with my subject_id: {}'.format(advert_info.getPlaciesStr(target_place + 1)))
+                logger.info('Adverts with my subject_id: {}'.format(
+                    advert_info.getPlaciesStr(target_place + 1)))
                 decision = cb.calcBestPrice(
                     advert_info, my_place, my_price, target_place)
 
@@ -161,8 +170,8 @@ def work_iteration(db):
                     logger.info('already best price and place')
                     decision_str = 'no changes'
 
-            json_adverts_array_first_five = json.dumps(adverts_array[:4])
-            json_priority_subjects = json.dumps(priority_subjects)
+            json_adverts_array_first_five = '{}' if adverts_array is None else json.dumps(adverts_array[:4])
+            json_priority_subjects = '{}' if priority_subjects is None else json.dumps(priority_subjects)
             db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
                                      target_price, target_place, decision_str, result_code,
                                      error_str, json_adverts_array_first_five, json_priority_subjects)

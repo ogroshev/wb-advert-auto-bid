@@ -63,3 +63,11 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                   error_str,
                                   json_adverts,
                                   json_priority_subjects))
+
+def alarm(db, company_id, error_str):
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    insert_query = f'''
+        INSERT INTO advert_alarm (advert_company_id, error_str) VALUES (%s, %s);
+    '''
+    cursor.execute(insert_query, (company_id,
+                                  error_str))
