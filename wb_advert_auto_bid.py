@@ -75,14 +75,14 @@ def get_advert_info(adv_company):
             adv_company['query'])
         priority_subjects = ads_search_result['prioritySubjects']
         adverts_array = ads_search_result['adverts']
-        logger.info('adverts_array[:3]: {}'.format(
-            ads_search_result['adverts'][:3]))
         logger.info('priority_subjects[]: {}'.format(
             priority_subjects))
         placement_response = wb_requests.get_placement(
             adv_company['type'], adv_company['company_id'],
             adv_company['cpm_cookies'], adv_company['x_user_id'])
         if adverts_array is not None:
+            logger.info('adverts_array[:3]: {}'.format(
+                ads_search_result['adverts'][:3]))
             return (True, adverts_array, priority_subjects, placement_response, result_code, error_str)
         else:
             logger.info('Empty adverts. Json: ', ads_search_result)
@@ -125,14 +125,16 @@ def work_iteration(db):
             if ok:
                 target_place = adv_company['target_place']
                 my_price = placement_response['place'][0]['price']
+                my_subject_id = placement_response['place'][0]['subjectId']
                 my_company_id = adv_company['company_id']
                 my_place = search_my_place(adverts_array, my_company_id)
 
-                logger.debug('my_price: {} my_place: {} target_place: {}'.format(
-                    my_price, my_place, target_place))
+                logger.debug('my_price: {} my_place: {} target_place: {} my_subject_id: {}'.format(
+                    my_price, my_place, target_place, my_subject_id))
 
                 advert_info = cb.AdvertInfo()
-                advert_info.fromAdverts(adverts_array)
+                advert_info.fromAdverts(adverts_array, my_subject_id)
+                logger.info('Adverts with my subject_id: {}'.format(advert_info.getPlaciesStr(target_place + 1)))
                 decision = cb.calcBestPrice(
                     advert_info, my_place, my_price, target_place)
 
@@ -162,7 +164,7 @@ def work_iteration(db):
             json_adverts_array_first_five = json.dumps(adverts_array[:4])
             json_priority_subjects = json.dumps(priority_subjects)
             db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
-                                     target_price, target_place, decision_str, result_code, 
+                                     target_price, target_place, decision_str, result_code,
                                      error_str, json_adverts_array_first_five, json_priority_subjects)
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
         time.sleep(1)

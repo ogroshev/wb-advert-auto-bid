@@ -64,7 +64,7 @@ def get_placement(advert_type, campaign_id, cpm_cookies, x_user_id):
     url = make_url(advert_type, campaign_id, 'placement')
     print('send request: {}'.format(url))
     headers = __build_headers_with_auth(campaign_id, cpm_cookies, x_user_id)
-    print('headers: {}'.format(headers))
+    # print('headers: {}'.format(headers))
     r = requests.get(url, headers=headers)
     print('response code: {}'.format(r.status_code))
     r.raise_for_status()
