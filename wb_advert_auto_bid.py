@@ -87,7 +87,8 @@ def get_advert_info(adv_company):
             return (True, adverts_array, priority_subjects, placement_response, result_code, error_str)
         else:
             logger.info('Empty adverts. Json: ', ads_search_result)
-            result_code = 500
+            result_code = 1000
+            error_str = "search_catalog_ads empty ads_search_result['adverts']"
     except requests.exceptions.HTTPError as e:
         global error_counter
         error_counter += 1
