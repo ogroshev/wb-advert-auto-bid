@@ -23,7 +23,9 @@ def get_adv_companies(db):
         "    ac.name,                  "
         "    type,                  "
         "    cpm_cookies,           "
-        "    x_user_id           "
+        "    x_user_id,           "
+        "    current_bet,  "
+        "    subject_id "
         "FROM advert_company ac     "
         "JOIN sellers s ON ac.id_seller = s.id "
         "WHERE turn_scan = TRUE "
@@ -37,8 +39,14 @@ def update_last_scan_ts(db, company_id):
     cursor.execute(update_query)
 
 
+def update_placement_data(db, company_id, current_bet, subject_id):
+    cursor = db.cursor()
+    update_query = f'UPDATE advert_company SET current_bet = {current_bet}, subject_id = {subject_id} WHERE id = {company_id};'
+    cursor.execute(update_query)
+
+
 def log_advert_bid(db, company_id, current_price, current_place, target_price, target_place, decision, 
-                    result_code, error_str, json_adverts, json_priority_subjects):
+                    result_code, error_str, json_adverts, json_priority_subjects, request_name):
     cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     insert_query = f'''
     INSERT INTO advert_company_log (advert_company_id,
@@ -50,8 +58,9 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                     result_code,
                                     error_str,
                                     json_adverts,
-                                    json_priority_subjects)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    json_priority_subjects,
+                                    request_name)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     '''
     cursor.execute(insert_query, (company_id,
                                   current_price,
@@ -62,7 +71,8 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                   result_code,
                                   error_str,
                                   json_adverts,
-                                  json_priority_subjects))
+                                  json_priority_subjects,
+                                  request_name))
 
 def alarm(db, company_id, error_str):
     cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
