@@ -224,7 +224,7 @@ def work_iteration(db):
                                 logger.info('campaign "{}" saved! New price: {}'.format(
                                     adv_company['name'], target_price))
                                 db_facade.update_placement_data(
-                                    db, adv_company['company_id'], adv_company['current_bet'], my_subject_id)
+                                    db, adv_company['company_id'], decision.targetPrice, my_subject_id)
                             else:
                                 logger.warn('could not save campaign: {} - {}',
                                             adv_company['company_id'], adv_company['name'])
