@@ -10,7 +10,7 @@ import json
 import logging
 import sys
 import pytz
-import requests
+import asyncio
 
 logger = logging.getLogger('logger')
 logger.setLevel(logging.DEBUG)
@@ -131,12 +131,20 @@ def get_advert_info(adv_company):
     return (True, adverts_array, priority_subjects, result_code, error_str)
 
 
-def work_iteration(db):
+async def work_iteration(db):
     adv_companies = db_facade.get_adv_companies(db)
     if len(adv_companies) == 0:
         logger.debug('nothing to do')
+    
+    logger.info(f"get {len(adv_companies)} companies. start at {time.strftime('%X')}")
+    async with asyncio.TaskGroup() as tg:
+        tasks = [tg.create_task(handle_company(db, ac)) for ac in adv_companies]
+    logger.info(f"finish handling {len(adv_companies)} companies at {time.strftime('%X')}")
+    
 
-    for adv_company in adv_companies:
+
+
+async def handle_company(db, adv_company):
         # если текущее время больше last_scan_ts + scan_interval_sec,
         #   то работаем с этой кампанией
         if is_it_time_to_work(adv_company):
@@ -145,7 +153,7 @@ def work_iteration(db):
                 logger.info('Company: {}. empty query, skipped'.format(
                     adv_company['name']))
                 db_facade.update_last_scan_ts(db, adv_company['company_id'])
-                continue
+                return
             if adv_company['current_bet'] in (None, ''):
                 ok, result_code, placement_response, error_str = wb_requests.get_placement(adv_company['type'], adv_company['company_id'],
                                                                                            adv_company['cpm_cookies'], adv_company['x_user_id'])
@@ -154,7 +162,7 @@ def work_iteration(db):
                         adv_company['company_id'], result_code, error_str))
                     db_facade.update_last_scan_ts(
                         db, adv_company['company_id'])
-                    continue
+                    return
                 logger.info('Company: {} Got current_bet: {}'.format(
                             adv_company['company_id'], placement_response['place'][0]['price']))
                 adv_company['current_bet'] = placement_response['place'][0]['price']
@@ -213,7 +221,7 @@ def work_iteration(db):
                                     adv_company['company_id'], error_str))
                                 db_facade.update_last_scan_ts(
                                     db, adv_company['company_id'])
-                                continue
+                                return
 
                             placement_response['place'][0]['price'] = decision.targetPrice
                             ok, result_code, error_str = wb_requests.save_advert_campaign(
@@ -242,13 +250,14 @@ def work_iteration(db):
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
 
 
+
 def main():
     logger.info('Service starting...')
     args = parse_arguments()
     db = db_facade.connect(args)
 
     while True:
-        work_iteration(db)
+        asyncio.run(work_iteration(db))
         time.sleep(2)
 
 
