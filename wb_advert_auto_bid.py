@@ -240,7 +240,6 @@ def work_iteration(db):
                                      target_price, target_place, decision_str, result_code,
                                      error_str, json_adverts_array_first_five, json_priority_subjects, request_name)
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
-        time.sleep(1)
 
 
 def main():
