@@ -54,9 +54,23 @@ def search_catalog_ads(query_text):
     headers["Referer"] = headers["Referer"].replace(
         '{url_encoded_query_text}', url_encoded_query_text)
     print('send request: {}'.format(url))
-    r = requests.get(url, headers=headers)
-    r.raise_for_status()
-    return r.json()
+
+    RETRY_COUNT = 5
+    RETRY_INTERVAL_SEC = 2
+    for attemption in range(1, RETRY_COUNT + 1):
+        try:
+            r = requests.get(url, headers=headers)
+            r.raise_for_status()
+            return r.json()    
+        except requests.exceptions.HTTPError as e:
+            print('catalog-ads. Http error: {}'.format(e))
+            print('{} attemption to retry... after {} sec'.format(
+                attemption, RETRY_INTERVAL_SEC))
+            time.sleep(RETRY_INTERVAL_SEC)
+        except Exception as e:
+            print('Unknown exception: {}'.format(e))
+    return None        
+
 
 
 def make_url(advert_type, campaign_id, request_name):
@@ -84,6 +98,9 @@ def get_placement(advert_type, campaign_id, cpm_cookies, x_user_id):
             time.sleep(RETRY_INTERVAL_SEC)
             result_code = e.response.status_code
             error_str = '{}'.format(e)
+        except Exception as e:
+            print('Unknown exception: {}'.format(e))
+
     print('Could not get placement campaign: {} after: {} attemtps'.format(
         campaign_id, RETRY_COUNT))
     return (False, result_code, None, error_str)
@@ -110,6 +127,8 @@ def save_advert_campaign(advert_type, campaign_id, json_request_body, cpm_cookie
             time.sleep(RETRY_INTERVAL_SEC)
             result_code = e.response.status_code
             error_str = '{}'.format(e)
+        except Exception as e:
+            print('Unknown exception: {}'.format(e))
 
     print('Could not save advert campaign {} after {} attemtps'.format(
         campaign_id, RETRY_COUNT))

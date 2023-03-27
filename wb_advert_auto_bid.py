@@ -105,6 +105,10 @@ def get_advert_info(adv_company):
 
     ads_search_result = wb_requests.search_catalog_ads(
         adv_company['query'])
+    if ads_search_result is None:
+        logger.info('search_catalog_ads error')
+        return (False, None, None, 1000, 'search_catalog_ads http error')
+
     priority_subjects = ads_search_result['prioritySubjects']
     adverts_array = ads_search_result['adverts']
     logger.info('priority_subjects[]: {}'.format(
@@ -162,6 +166,9 @@ async def handle_company(db, adv_company):
                         adv_company['company_id'], result_code, error_str))
                     db_facade.update_last_scan_ts(
                         db, adv_company['company_id'])
+                    db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
+                            None, None, None, result_code,
+                            error_str, '{}', '{}', 'placement')
                     return
                 logger.info('Company: {} Got current_bet: {}'.format(
                             adv_company['company_id'], placement_response['place'][0]['price']))
