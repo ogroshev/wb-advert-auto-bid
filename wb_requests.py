@@ -134,45 +134,58 @@ def save_advert_campaign(advert_type, campaign_id, json_request_body, cpm_cookie
         campaign_id, RETRY_COUNT))
     return (False, result_code, error_str)
 
+def save_advert_campaign_by_api(campaign_id, token, price, subject_id):
+    url = 'https://advert-api.wb.ru/adv/v0/cpm'
+    headers = {
+        "Accept": "*/*",
+        "Content-Type": "application/json",
+    }
+    headers["Authorization"] = token
+    json_request_body = f'''{{
+        "advertId": {campaign_id},
+        "type": 6, 
+        "cpm": {price},
+        "param": {subject_id}
+    }}'''
+    print(json_request_body)
+    body = json.loads(json_request_body)
+    
+    print('send request: {} | advertId: {} | cpm: {} | param: {} | token: {}'.format(url, campaign_id, price, subject_id, token))
+
+    RETRY_COUNT = 5
+    RETRY_INTERVAL_SEC = 2
+    for attemption in range(1, RETRY_COUNT + 1):
+        try:
+            r = requests.post(url, headers=headers, json=body)
+            r.raise_for_status()
+            return (True, r.status_code, None)
+        except requests.exceptions.HTTPError as e:
+            print('[API] save campaign. Http error: {}'.format(e))
+            result_code = e.response.status_code
+            error_str = '{}'.format(e)
+            if result_code == 422:
+                break
+            print('{} attemption to retry... after {} sec'.format(
+                attemption, RETRY_INTERVAL_SEC))
+            time.sleep(RETRY_INTERVAL_SEC)
+
+        except Exception as e:
+            print('Unknown exception: {}'.format(e))
+
+    print('Could not save advert campaign {} after {} attemtps'.format(
+        campaign_id, RETRY_COUNT))
+    return (False, result_code, error_str)
+
+
+# token = ''
+
+# print(save_advert_campaign_by_api(4086336, token, 549, 268))
 
 # placement_json_response = get_placement('search', 1920749, cookie)
 # placement_json_response['place'][0]['price'] = 800
 # print(placement_json_response)
 # print(save_advert_campaign('search', 1920749, placement_json_response, cookie))
-json_req = '''
-{
-    "place": [
-        {
-            "keyWord": "анораки",
-            "subjectId": 1791,
-            "price": 178,
-            "searchElements": [
-                {
-                    "nm": 95763631,
-                    "name": "Куртка Stone Island",
-                    "brand": "STONE ISLAND",
-                    "active": true,
-                    "stock": true
-                },
-                {
-                    "nm": 95769078,
-                    "name": "Анорак Stone Island",
-                    "brand": "STONE ISLAND",
-                    "active": true,
-                    "stock": true
-                },
-                {
-                    "nm": 95764794,
-                    "name": "Куртка Stone Island",
-                    "brand": "STONE ISLAND",
-                    "active": true,
-                    "stock": true
-                }
-            ]
-        }
-    ]
-}
-'''
+# json_req = ''''''
 # req = json.loads(json_req)
 # cpm_cookies = 'x-supplier-id-external=ceb9502c-a20a-45a3-bd2a-1767cb5f5298; WBToken=At_2nAn0qsO8DPSI-LwMMoNEnjXODCr6UHTLoKSztLKWwtSxI2jFlHP98Bia_q3SCGq3yj_cyxmLqu6KPKowBNqo'
 # save_response = save_advert_campaign('search', 3645698, req, cpm_cookies, '19348319')
