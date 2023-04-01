@@ -245,8 +245,8 @@ async def handle_company(db, adv_company):
                         db_facade.update_placement_data(
                             db, adv_company['company_id'], decision.targetPrice, my_subject_id)
                     else:
-                        logger.warn('could not save campaign: {} - {}',
-                                    adv_company['company_id'], adv_company['name'])
+                        logger.warn('could not save campaign: {} - {}'.format(
+                                    adv_company['company_id'], adv_company['name']))
             else:
                 logger.info('already best price and place')
                 decision_str = 'no changes'

@@ -30,6 +30,7 @@ def get_adv_companies(db):
         "FROM advert_company ac     "
         "JOIN sellers s ON ac.id_seller = s.id "
         "WHERE turn_scan = TRUE "
+        "AND cpm_token IS NOT NULL"
         "AND type = 'search'")
     return cursor.fetchall()
 
