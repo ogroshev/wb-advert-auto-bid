@@ -29,8 +29,7 @@ def get_adv_companies(db):
         "    cpm_token "
         "FROM advert_company ac     "
         "JOIN sellers s ON ac.id_seller = s.id "
-        "WHERE turn_scan = TRUE "
-        "AND cpm_token IS NOT NULL "
+        "WHERE turn_scan = true "
         "AND type = 'search'")
     return cursor.fetchall()
 
@@ -41,7 +40,7 @@ def update_last_scan_ts(db, company_id):
     cursor.execute(update_query)
 
 
-def update_placement_data(db, company_id, current_bet, subject_id):
+def update_company(db, company_id, current_bet, subject_id):
     cursor = db.cursor()
     update_query = f'UPDATE advert_company SET current_bet = {current_bet}, subject_id = {subject_id} WHERE id = {company_id};'
     cursor.execute(update_query)

@@ -67,39 +67,7 @@ def search_my_place(adverts_array, my_company_id):
     return my_place
 
 
-# def get_advert_info(adv_company):
-#     result_code = 200
-#     error_str = None
-#     try:
-#         ads_search_result = wb_requests.search_catalog_ads(
-#             adv_company['query'])
-#         priority_subjects = ads_search_result['prioritySubjects']
-#         adverts_array = ads_search_result['adverts']
-#         logger.info('priority_subjects[]: {}'.format(
-#             priority_subjects))
-#         placement_response = wb_requests.get_placement(
-#             adv_company['type'], adv_company['company_id'],
-#             adv_company['cpm_cookies'], adv_company['x_user_id'])
-#         if adverts_array is not None:
-#             logger.info('adverts_array[:3]: {}'.format(
-#                 ads_search_result['adverts'][:3]))
-#             # logger.info('placement_response: {}'.format(placement_response))
-#             return (True, adverts_array, priority_subjects, placement_response, result_code, error_str)
-#         else:
-#             logger.info('Empty adverts. Json: ', ads_search_result)
-#             result_code = 1000
-#             error_str = "search_catalog_ads empty ads_search_result['adverts']"
-#     except requests.exceptions.HTTPError as e:
-#         global error_counter
-#         error_counter += 1
-#         logger.info('{} Http error: {} skip {} - {}'.format(error_counter,
-#                     e, adv_company['company_id'], adv_company['name']))
-#         result_code = e.response.status_code
-#         error_str = '{}'.format(e)
-#     return (False, None, None, None, result_code, error_str)
-
-
-def get_advert_info(adv_company):
+def get_catalog_ads_adverts_info(adv_company):
     result_code = 200
     error_str = None
 
@@ -123,15 +91,6 @@ def get_advert_info(adv_company):
     logger.info('adverts_array[:3]: {}'.format(
         ads_search_result['adverts'][:3]))
 
-    # ok, result_code, placement_response, error_str = wb_requests.get_placement(
-    # adv_company['type'], adv_company['company_id'],
-    # adv_company['cpm_cookies'], adv_company['x_user_id'])
-    # logger.info("placement result_code: {}, body: {}, error_str: {}",
-    #             result_code, placement_response, error_str)
-
-    # if not ok:
-    #     return (False, None, None, result_code, error_str)
-
     return (True, adverts_array, priority_subjects, result_code, error_str)
 
 
@@ -149,19 +108,39 @@ async def work_iteration(db):
         f"finish handling {len(adv_companies)} companies at {time.strftime('%X')}")
 
 
+def is_valid(adv_company) -> tuple[bool, str]:
+    valid = True
+    reason = ''
+    if adv_company['query'] in (None, ''):
+        reason = 'field advert_company.query IS NULL'
+        valid = False
+    if adv_company['cpm_token'] in (None, ''):
+        reason = 'field sellers.cpm_token IS NULL'
+        valid = False
+
+    if not valid:
+        logger.warning('Company: {} - {} skipped. Reson: {}'.format(adv_company['company_id'],
+                       adv_company['name'], reason))
+        return False, reason
+    return True, None
+
+
 async def handle_company(db, adv_company):
     # если текущее время больше last_scan_ts + scan_interval_sec,
     #   то работаем с этой кампанией
     if is_it_time_to_work(adv_company):
         logger.info('checking company: {}'.format(adv_company['name']))
-        if adv_company['query'] in (None, ''):
-            logger.info('Company: {}. empty query, skipped'.format(
-                adv_company['name']))
+        valid, error_str = is_valid(adv_company)
+        if not valid:
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
+            db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
+                                     None, None, None, 1001,
+                                     error_str, '{}', '{}', None)
             return
+
         if adv_company['current_bet'] in (None, ''):
-            ok, result_code, placement_response, error_str = wb_requests.get_placement(adv_company['type'], adv_company['company_id'],
-                                                                                       adv_company['cpm_cookies'], adv_company['x_user_id'])
+            ok, result_code, advert_info_response, error_str = wb_requests.get_advert_info_by_api(
+                adv_company['company_id'], adv_company['cpm_token'])
             if not ok:
                 logger.info('Company: {} skipped. Could not get current bet. Http code: {}. Error: {}'.format(
                     adv_company['company_id'], result_code, error_str))
@@ -169,15 +148,14 @@ async def handle_company(db, adv_company):
                     db, adv_company['company_id'])
                 db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
                                          None, None, None, result_code,
-                                         error_str, '{}', '{}', 'placement')
-                return
+                                         error_str, '{}', '{}', 'advert')
             logger.info('Company: {} Got current_bet: {}'.format(
-                        adv_company['company_id'], placement_response['place'][0]['price']))
-            adv_company['current_bet'] = placement_response['place'][0]['price']
+                        adv_company['company_id'], advert_info_response['params'][0]['price']))
+            adv_company['current_bet'] = advert_info_response['params'][0]['price']
             db_facade.update_placement_data(
-                db, adv_company['company_id'], adv_company['current_bet'], placement_response['place'][0]['subjectId'])
+                db, adv_company['company_id'], adv_company['current_bet'], advert_info_response['params'][0]['subjectId'])
 
-        ok, adverts_array, priority_subjects, result_code, error_str = get_advert_info(
+        ok, adverts_array, priority_subjects, result_code, error_str = get_catalog_ads_adverts_info(
             adv_company)
         request_name = "catalog-ads"
 
@@ -214,35 +192,35 @@ async def handle_company(db, adv_company):
                 else:
                     decision_str = 'change bet'
 
-                    # ok, result_code, placement_response, error_str = wb_requests.get_placement(adv_company['type'], adv_company['company_id'],
-                    #                                                                            adv_company['cpm_cookies'], adv_company['x_user_id'])
-                    # request_name = "placement"
-                    # logger.info('campaign: {}. placement before save. result_code: {}'.format(
-                    #             adv_company['company_id'], result_code))
-                    # if ok:
-                    #     my_subject_id = placement_response['place'][0]['subjectId']
-                    #     if priority_subjects is not None and my_subject_id != priority_subjects[0]:
-                    #         error_str = "priority_subjects[0]: {} not equal placement's subject_id: {}".format(
-                    #             priority_subjects[0], my_subject_id)
-                    #         db_facade.alarm(
-                    #             db, adv_company['company_id'], error_str)
-                    #         logger.warning("Company: {} skipped. Alarm: {}".format(
-                    #             adv_company['company_id'], error_str))
-                    #         db_facade.update_last_scan_ts(
-                    #             db, adv_company['company_id'])
-                    #         return
+                    # перед изменением ставки проверяем еще что РК заведена в самой приоритетной категории
+                    ok, result_code, advert_info_response, error_str = wb_requests.get_advert_info_by_api(
+                        adv_company['company_id'], adv_company['cpm_token'])
+                    request_name = 'advert'
+                    logger.info("campaign: {}. 'advert' before save. result_code: {}".format(
+                                adv_company['company_id'], result_code))
+                    if ok:
+                        my_subject_id = advert_info_response['params'][0]['subjectId']
+                        if priority_subjects is not None and my_subject_id != priority_subjects[0]:
+                            error_str = "priority_subjects[0]: {} not equal adverts's subject_id: {}".format(
+                                priority_subjects[0], my_subject_id)
+                            db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
+                                                     None, None, None, 1002,
+                                                     error_str, '{}', '{}', 'advert')
+                            db_facade.alarm(
+                                db, adv_company['company_id'], error_str)
+                            logger.warning("Company: {} skipped. Alarm: {}".format(
+                                adv_company['company_id'], error_str))
+                            db_facade.update_last_scan_ts(
+                                db, adv_company['company_id'])
+                            return
 
-                    # placement_response['place'][0]['price'] = decision.targetPrice
-                    # ok, result_code, error_str = wb_requests.save_advert_campaign(
-                    #     adv_company['type'], adv_company['company_id'], placement_response,
-                    #     adv_company['cpm_cookies'], adv_company['x_user_id'])
                     ok, result_code, error_str = wb_requests.save_advert_campaign_by_api(
                         adv_company['company_id'], adv_company['cpm_token'], decision.targetPrice, adv_company['subject_id'])
                     request_name = "save"
                     if ok:
                         logger.info('campaign "{}" saved! New price: {}'.format(
                             adv_company['name'], target_price))
-                        db_facade.update_placement_data(
+                        db_facade.update_company(
                             db, adv_company['company_id'], decision.targetPrice, my_subject_id)
                     else:
                         logger.warn('could not save campaign: {} - {}'.format(
