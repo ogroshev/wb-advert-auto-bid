@@ -186,8 +186,8 @@ async def handle_company(db, adv_company):
             if decision.changePriceNeeded:
                 target_price = decision.targetPrice
                 if decision.targetPrice > adv_company['max_bet']:
-                    logger.info('targetPrice: {} max_bet: {}. Skip...'.format(
-                        target_price, adv_company['max_bet']))
+                    logger.info('campaign: {}. targetPrice: {} max_bet: {}. Skip...'.format(adv_company['company_id'],
+                                                                                            target_price, adv_company['max_bet']))
                     decision_str = 'max bet'
                 else:
                     decision_str = 'change bet'
@@ -196,8 +196,8 @@ async def handle_company(db, adv_company):
                     ok, result_code, advert_info_response, error_str = wb_requests.get_advert_info_by_api(
                         adv_company['company_id'], adv_company['cpm_token'])
                     request_name = 'advert'
-                    logger.info("campaign: {}. 'advert' before save. result_code: {}".format(
-                                adv_company['company_id'], result_code))
+                    logger.info("campaign: {}. 'advert' before save. result_code: {} error_str: {}".format(
+                                adv_company['company_id'], result_code, error_str))
                     if ok:
                         my_subject_id = advert_info_response['params'][0]['subjectId']
                         if priority_subjects is not None and my_subject_id != priority_subjects[0]:
