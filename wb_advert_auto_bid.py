@@ -152,7 +152,7 @@ async def handle_company(db, adv_company):
             logger.info('Company: {} Got current_bet: {}'.format(
                         adv_company['company_id'], advert_info_response['params'][0]['price']))
             adv_company['current_bet'] = advert_info_response['params'][0]['price']
-            db_facade.update_placement_data(
+            db_facade.update_company(
                 db, adv_company['company_id'], adv_company['current_bet'], advert_info_response['params'][0]['subjectId'])
 
         ok, adverts_array, priority_subjects, result_code, error_str = get_catalog_ads_adverts_info(
