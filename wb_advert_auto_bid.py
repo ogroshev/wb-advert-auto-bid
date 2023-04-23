@@ -129,7 +129,7 @@ async def handle_company(db, adv_company):
     # если текущее время больше last_scan_ts + scan_interval_sec,
     #   то работаем с этой кампанией
     if is_it_time_to_work(adv_company):
-        logger.info('checking company: {}'.format(adv_company['name']))
+        logger.info('checking company: {} - {}'.format(adv_company['company_id'], adv_company['name']))
         valid, error_str = is_valid(adv_company)
         if not valid:
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
@@ -149,6 +149,7 @@ async def handle_company(db, adv_company):
                 db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
                                          None, None, None, result_code,
                                          error_str, '{}', '{}', 'advert')
+                return
             logger.info('Company: {} Got current_bet: {}'.format(
                         adv_company['company_id'], advert_info_response['params'][0]['price']))
             adv_company['current_bet'] = advert_info_response['params'][0]['price']
