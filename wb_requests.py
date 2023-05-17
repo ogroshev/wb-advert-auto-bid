@@ -32,7 +32,7 @@ def search_catalog_ads(query_text):
     RETRY_INTERVAL_SEC = 2
     for attemption in range(1, RETRY_COUNT + 1):
         try:
-            r = requests.get(url, headers=headers)
+            r = requests.get(url, headers=headers, timeout=15)
             r.raise_for_status()
             return r.json()
         except requests.exceptions.HTTPError as e:
