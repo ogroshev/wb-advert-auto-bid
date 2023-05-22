@@ -70,7 +70,7 @@ def save_advert_campaign_by_api(campaign_id, token, price, subject_id):
     error_str = None
     for attemption in range(1, RETRY_COUNT + 1):
         try:
-            r = requests.post(url, headers=headers, json=body)
+            r = requests.post(url, headers=headers, json=body, timeout=15)
             r.raise_for_status()
             return (True, r.status_code, None)
         except requests.exceptions.HTTPError as e:
@@ -137,7 +137,7 @@ def get_advert_info_by_api(campaign_id, token):
     error_str = None
     for attemption in range(1, RETRY_COUNT + 1):
         try:
-            r = requests.get(url, headers=headers, params={'id': campaign_id})
+            r = requests.get(url, headers=headers, params={'id': campaign_id}, timeout=15)
             r.raise_for_status()
             print('response. status: {} body: {}'.format(r.status_code, r.text))
 
