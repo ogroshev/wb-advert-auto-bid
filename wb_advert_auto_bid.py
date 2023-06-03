@@ -129,7 +129,8 @@ async def handle_company(db, adv_company):
     # если текущее время больше last_scan_ts + scan_interval_sec,
     #   то работаем с этой кампанией
     if is_it_time_to_work(adv_company):
-        logger.info('checking company: {} - {}'.format(adv_company['company_id'], adv_company['name']))
+        logger.info(
+            'checking company: {} - {}'.format(adv_company['company_id'], adv_company['name']))
         valid, error_str = is_valid(adv_company)
         if not valid:
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
@@ -201,7 +202,11 @@ async def handle_company(db, adv_company):
                                 adv_company['company_id'], result_code, error_str))
                     if ok:
                         my_subject_id = advert_info_response['params'][0]['subjectId']
-                        if priority_subjects is not None and my_subject_id != priority_subjects[0]:
+                        logger.info("campaign: {}. check_subject_id: {}".format(
+                            adv_company['company_id'], adv_company['check_subject_id']))
+                        if adv_company['check_subject_id'] \
+                                and priority_subjects is not None \
+                                and my_subject_id != priority_subjects[0]:
                             error_str = "priority_subjects[0]: {} not equal adverts's subject_id: {}".format(
                                 priority_subjects[0], my_subject_id)
                             db_facade.log_advert_bid(db, adv_company['company_id'], None, None,

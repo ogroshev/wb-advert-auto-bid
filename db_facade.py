@@ -26,12 +26,40 @@ def get_adv_companies(db):
         "    x_user_id,           "
         "    current_bet,  "
         "    subject_id, "
-        "    cpm_token "
+        "    cpm_token, "
+        "    check_subject_id "
         "FROM advert_company ac     "
         "JOIN sellers s ON ac.id_seller = s.id "
         "WHERE turn_scan = true "
         "AND type = 'search'")
     return cursor.fetchall()
+
+
+# def get_seller_auth(db):
+#     cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+#     cursor.execute(
+#         '''
+#         		SELECT
+# 		u.seller_id,
+# 		s.name,
+# 		u.id as user_id,
+# 		u.user_name,
+# 		u.x_supplier_id,
+# 		u.x_user_id,
+# 		ua.token_value
+# 	FROM sellers s
+# 	JOIN seller_user u ON s.id = u.seller_id
+# 	JOIN seller_user_auth ua ON u.id = ua.user_id
+# 	JOIN (
+# 	    SELECT u.seller_id, max(sua.update_date) as newest
+#         FROM seller_user u
+#         JOIN seller_user_auth sua ON u.id = sua.user_id
+#         WHERE token_type = 'cmp_token'
+#         GROUP BY u.seller_id
+#         ) s1 on s1.newest = ua.update_date
+# 	WHERE token_type = 'cmp_token'
+#         ''')
+#     return cursor.fetchall()
 
 
 def update_last_scan_ts(db, company_id):
