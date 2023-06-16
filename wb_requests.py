@@ -5,6 +5,17 @@ import urllib
 import time
 import json
 
+from dataclasses import dataclass
+from dataclasses import asdict
+
+@dataclass
+class AdvertBetInfoRequest:
+    advert_id: int
+    subject_id: int
+    target_place: int
+    validate_subject_id_priority: bool
+    keywords: list
+
 
 def __wb_headers_whitout_cookies():
     headers = {
@@ -18,6 +29,38 @@ def __wb_headers_whitout_cookies():
         "Connection": "keep-alive"
     }
     return headers
+
+
+def advert_bet_info(url_host: str, req: AdvertBetInfoRequest):
+    url = f'http://{url_host}/advert-bet-info'
+    print("send request: {}".format(url))
+    req_str = json.dumps(asdict(req))
+    try:
+        resp = requests.post(url, data=req_str, timeout=15)
+        resp.raise_for_status()
+        return resp.status_code, None, resp.json()
+    except requests.exceptions.HTTPError as e:
+        print('advert_bet_info Http error: {}'.format(e))
+        error_str = '{}'.format(e)
+        e.response.status_code, error_str, None
+    except Exception as e:
+        print('Unknown exception: {}'.format(e))
+        error_str = '{}'.format(e)
+        return 1000, error_str, None
+    
+
+# req = AdvertBetInfoRequest(226, 5, True, 
+#                                     ["нитриловые перчатки s", 
+#                                     "нитриловые перчатки м",
+#                                      "перчатки латексные",
+#                                      "перчатки резиновые",
+#                                      "нитриловые перчатки",
+#                                      "перчатки",
+#                                      "одноразовые перчатки",
+#                                      "резиновые перчатки" ])
+
+# resp = advert_bet_info(req)
+# print(resp.json())
 
 
 def search_catalog_ads(query_text):

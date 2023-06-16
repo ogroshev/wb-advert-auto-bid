@@ -61,6 +61,14 @@ def get_adv_companies(db):
 #         ''')
 #     return cursor.fetchall()
 
+def get_company_multi_keys_list(db, company_id):
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor.execute(
+        f"SELECT keyword FROM advert_company_key WHERE advert_company_id = {company_id}")
+    keywords_list = []
+    for keyword in cursor.fetchall():
+        keywords_list.append(keyword[0])
+    return keywords_list
 
 def update_last_scan_ts(db, company_id):
     cursor = db.cursor()
@@ -75,7 +83,7 @@ def update_company(db, company_id, current_bet, subject_id):
 
 
 def log_advert_bid(db, company_id, current_price, current_place, target_price, target_place, decision, 
-                    result_code, error_str, json_adverts, json_priority_subjects, request_name):
+                    result_code, error_str, json_adverts, json_priority_subjects, json_advert_bet_info, request_name):
     cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     insert_query = f'''
     INSERT INTO advert_company_log (advert_company_id,
@@ -88,8 +96,9 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                     error_str,
                                     json_adverts,
                                     json_priority_subjects,
+                                    json_advert_bet_info,
                                     request_name)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     '''
     cursor.execute(insert_query, (company_id,
                                   current_price,
@@ -101,6 +110,7 @@ def log_advert_bid(db, company_id, current_price, current_place, target_price, t
                                   error_str,
                                   json_adverts,
                                   json_priority_subjects,
+                                  json_advert_bet_info,
                                   request_name))
 
 def alarm(db, company_id, error_str):

@@ -18,7 +18,6 @@ handler = logging.StreamHandler(stream=sys.stdout)
 logger.addHandler(handler)
 error_counter = 0
 
-
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='WB advert parser', add_help=False)
@@ -31,6 +30,8 @@ def parse_arguments():
                         help='database port')
     parser.add_argument('-h', '--db-host', dest='db_host',
                         help='database host')
+    parser.add_argument('-b', '--bid-checker-url', dest='bid_checker_url',
+                        help='external service for check bid by catalog-ads request')
     return parser.parse_args()
 
 
@@ -94,7 +95,7 @@ def get_catalog_ads_adverts_info(adv_company):
     return (True, adverts_array, priority_subjects, result_code, error_str)
 
 
-async def work_iteration(db):
+async def work_iteration(db, bid_checker_url):
     adv_companies = db_facade.get_adv_companies(db)
     if len(adv_companies) == 0:
         logger.debug('nothing to do')
@@ -102,7 +103,7 @@ async def work_iteration(db):
     logger.info(
         f"get {len(adv_companies)} companies. start at {time.strftime('%X')}")
     async with asyncio.TaskGroup() as tg:
-        tasks = [tg.create_task(handle_company(db, ac))
+        tasks = [tg.create_task(handle_company(db, ac, bid_checker_url))
                  for ac in adv_companies]
     logger.info(
         f"finish handling {len(adv_companies)} companies at {time.strftime('%X')}")
@@ -125,7 +126,7 @@ def is_valid(adv_company) -> tuple[bool, str]:
     return True, None
 
 
-async def handle_company(db, adv_company):
+async def handle_company(db, adv_company, bid_checker_url):
     # если текущее время больше last_scan_ts + scan_interval_sec,
     #   то работаем с этой кампанией
     if is_it_time_to_work(adv_company):
@@ -136,7 +137,7 @@ async def handle_company(db, adv_company):
             db_facade.update_last_scan_ts(db, adv_company['company_id'])
             db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
                                      None, None, None, 1001,
-                                     error_str, '{}', '{}', None)
+                                     error_str, '{}', '{}', '{}', None)
             return
 
         if adv_company['current_bet'] in (None, ''):
@@ -149,7 +150,7 @@ async def handle_company(db, adv_company):
                     db, adv_company['company_id'])
                 db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
                                          None, None, None, result_code,
-                                         error_str, '{}', '{}', 'advert')
+                                         error_str, '{}', '{}', '{}', 'advert')
                 return
             logger.info('Company: {} Got current_bet: {}'.format(
                         adv_company['company_id'], advert_info_response['params'][0]['price']))
@@ -157,101 +158,194 @@ async def handle_company(db, adv_company):
             db_facade.update_company(
                 db, adv_company['company_id'], adv_company['current_bet'], advert_info_response['params'][0]['subjectId'])
 
-        ok, adverts_array, priority_subjects, result_code, error_str = get_catalog_ads_adverts_info(
-            adv_company)
-        request_name = "catalog-ads"
+        # ищем множественные ключи по РК
+        keywords = db_facade.get_company_multi_keys_list(
+            db, adv_company['company_id'])
+        if len(keywords) != 0:
+            print("keywords: ", keywords)
+            handle_new_logic_advert_bet_info_request(db, adv_company, keywords, bid_checker_url)
+        else:
+            handle_old_logic_with_catalogads_request(db, adv_company)
 
-        my_price = None
-        my_place = None
-        target_price = None
-        target_place = None
-        decision_str = None
-        if ok:
-            target_place = adv_company['target_place']
-            my_price = adv_company['current_bet']
-            my_company_id = adv_company['company_id']
-            my_subject_id = adv_company['subject_id']
 
-            my_place = search_my_place(adverts_array, my_company_id)
-
-            logger.debug('my_price: {} my_place: {} target_place: {} '.format(
-                my_price, my_place, target_place))
-
-            advert_info = cb.AdvertInfo()
-            advert_info.fromAdverts(adverts_array, my_subject_id)
-            logger.info('Adverts with my subject_id: {}'.format(
-                advert_info.getPlaciesStr(target_place + 1)))
-
-            decision = cb.calcBestPrice(
-                advert_info, my_place, my_price, target_place)
-
-            if decision.changePriceNeeded:
-                target_price = decision.targetPrice
-                if decision.targetPrice > adv_company['max_bet']:
-                    logger.info('campaign: {}. targetPrice: {} max_bet: {}. Skip...'.format(adv_company['company_id'],
-                                                                                            target_price, adv_company['max_bet']))
-                    decision_str = 'max bet'
-                else:
-                    decision_str = 'change bet'
-
-                    # перед изменением ставки проверяем еще что РК заведена в самой приоритетной категории
-                    ok, result_code, advert_info_response, error_str = wb_requests.get_advert_info_by_api(
-                        adv_company['company_id'], adv_company['cpm_token'])
-                    request_name = 'advert'
-                    logger.info("campaign: {}. 'advert' before save. result_code: {} error_str: {}".format(
-                                adv_company['company_id'], result_code, error_str))
-                    if ok:
-                        my_subject_id = advert_info_response['params'][0]['subjectId']
-                        logger.info("campaign: {}. check_subject_id: {}".format(
-                            adv_company['company_id'], adv_company['check_subject_id']))
-                        if adv_company['check_subject_id'] \
-                                and priority_subjects is not None \
-                                and my_subject_id != priority_subjects[0]:
-                            error_str = "priority_subjects[0]: {} not equal adverts's subject_id: {}".format(
-                                priority_subjects[0], my_subject_id)
-                            db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
-                                                     None, None, None, 1002,
-                                                     error_str, '{}', '{}', 'advert')
-                            db_facade.alarm(
-                                db, adv_company['company_id'], error_str)
-                            logger.warning("Company: {} skipped. Alarm: {}".format(
-                                adv_company['company_id'], error_str))
-                            db_facade.update_last_scan_ts(
-                                db, adv_company['company_id'])
-                            return
-
-                    ok, result_code, error_str = wb_requests.save_advert_campaign_by_api(
-                        adv_company['company_id'], adv_company['cpm_token'], decision.targetPrice, adv_company['subject_id'])
-                    request_name = "save"
-                    if ok:
-                        logger.info('campaign "{}" saved! New price: {}'.format(
-                            adv_company['name'], target_price))
-                        db_facade.update_company(
-                            db, adv_company['company_id'], decision.targetPrice, my_subject_id)
-                    else:
-                        logger.warn('could not save campaign: {} - {}'.format(
-                                    adv_company['company_id'], adv_company['name']))
-            else:
-                logger.info('already best price and place')
-                decision_str = 'no changes'
-
-        json_adverts_array_first_five = '{}' if adverts_array is None else json.dumps(
-            adverts_array[:4])
-        json_priority_subjects = '{}' if priority_subjects is None else json.dumps(
-            priority_subjects)
-        db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
-                                 target_price, target_place, decision_str, result_code,
-                                 error_str, json_adverts_array_first_five, json_priority_subjects, request_name)
+def handle_new_logic_advert_bet_info_request(db, adv_company, keywords, bid_checker_url):
+    request_name = "advert-bet-info"
+    target_place = adv_company['target_place']
+    my_price = adv_company['current_bet']
+    my_subject_id = adv_company['subject_id']
+    my_place = None
+    decision_str = None
+    result_code, error_str, advert_bet_info_response = wb_requests.advert_bet_info(
+        url_host=bid_checker_url, 
+        req=wb_requests.AdvertBetInfoRequest(
+            adv_company['company_id'],
+            my_subject_id,
+            target_place,
+            validate_subject_id_priority=True,
+            keywords=keywords)
+        )
+    if advert_bet_info_response is None:
+        logger.error("advert_bet_info_resp is None. result_code: {}, error_str: {}".format(
+            result_code, error_str))
+        db_facade.log_advert_bid(db, adv_company['company_id'], my_price, None,
+                                 None, target_place, None, result_code,
+                                 error_str, None, None, '{}', "advert-bet-info")
         db_facade.update_last_scan_ts(db, adv_company['company_id'])
+        return
+
+    my_place = advert_bet_info_response['bets']['my_place']
+    logger.debug("advert_bet_info_resp: {}".format(advert_bet_info_response))
+    logger.debug('my_price: {} my_place: {} target_place: {} '.format(
+        my_price, my_place, target_place))
+
+    decision = cb.calcBestPriceV2(
+        advert_bet_info_response['bets'], adv_company['company_id'], my_price)
+
+    if decision.changePriceNeeded:
+        target_price = decision.targetPrice
+        if decision.targetPrice > adv_company['max_bet']:
+            logger.info('campaign: {}. targetPrice: {} max_bet: {}. Skip...'.format(adv_company['company_id'],
+                                                                                    target_price, adv_company['max_bet']))
+            decision_str = 'max bet'
+        else:
+            decision_str = 'change bet'
+
+            # если check_subject_id = true, проверяем что РК заведена в самой приоритетной категории
+            if adv_company['check_subject_id'] and advert_bet_info_response['warnings'] is not None:
+                for warning in advert_bet_info_response['warnings']:
+                    error_str = "keyword '{}' priority_subjects[0]: {} not equal adverts's subject_id: {}".format(
+                        warning['keyword'], warning['priority_subject_id'], my_subject_id)
+                    db_facade.alarm(db, adv_company['company_id'], error_str)
+
+            ok, result_code, error_str = wb_requests.save_advert_campaign_by_api(
+                adv_company['company_id'], adv_company['cpm_token'], decision.targetPrice, my_subject_id)
+            request_name = "save"
+            if ok:
+                logger.info('campaign "{}" saved! New price: {}'.format(
+                    adv_company['name'], target_price))
+                db_facade.update_company(
+                    db, adv_company['company_id'], decision.targetPrice, my_subject_id)
+            else:
+                logger.warn('could not save campaign: {} - {}'.format(
+                            adv_company['company_id'], adv_company['name']))
+    else:
+        logger.info('already best price and place')
+        decision_str = 'no changes'
+    json_advert_bet_info_response = '{}' if advert_bet_info_response is None else json.dumps(
+        advert_bet_info_response, ensure_ascii=False)
+    logger.info("json_advert_bet_info_response: {}".format(
+        json_advert_bet_info_response))
+    db_facade.log_advert_bid(db,
+                             adv_company['company_id'],
+                             my_price,
+                             my_place,
+                             decision.targetPrice,
+                             target_place,
+                             decision_str,
+                             result_code,
+                             error_str,
+                             '{}',
+                             '{}',
+                             json_advert_bet_info_response,
+                             request_name)
+    db_facade.update_last_scan_ts(db, adv_company['company_id'])
+
+
+def handle_old_logic_with_catalogads_request(db, adv_company):
+    ok, adverts_array, priority_subjects, result_code, error_str = get_catalog_ads_adverts_info(
+        adv_company)
+    request_name = "catalog-ads"
+
+    my_price = None
+    my_place = None
+    target_price = None
+    target_place = None
+    decision_str = None
+    if ok:
+        target_place = adv_company['target_place']
+        my_price = adv_company['current_bet']
+        my_company_id = adv_company['company_id']
+        my_subject_id = adv_company['subject_id']
+
+        my_place = search_my_place(adverts_array, my_company_id)
+
+        logger.debug('my_price: {} my_place: {} target_place: {} '.format(
+            my_price, my_place, target_place))
+
+        advert_info = cb.AdvertInfo()
+        advert_info.fromAdverts(adverts_array, my_subject_id)
+        logger.info('Adverts with my subject_id: {}'.format(
+            advert_info.getPlaciesStr(target_place + 1)))
+
+        decision = cb.calcBestPrice(
+            advert_info, my_place, my_price, target_place)
+
+        if decision.changePriceNeeded:
+            target_price = decision.targetPrice
+            if decision.targetPrice > adv_company['max_bet']:
+                logger.info('campaign: {}. targetPrice: {} max_bet: {}. Skip...'.format(adv_company['company_id'],
+                                                                                        target_price, adv_company['max_bet']))
+                decision_str = 'max bet'
+            else:
+                decision_str = 'change bet'
+
+                # перед изменением ставки проверяем еще что РК заведена в самой приоритетной категории
+                ok, result_code, advert_info_response, error_str = wb_requests.get_advert_info_by_api(
+                    adv_company['company_id'], adv_company['cpm_token'])
+                request_name = 'advert'
+                logger.info("campaign: {}. 'advert' before save. result_code: {} error_str: {}".format(
+                            adv_company['company_id'], result_code, error_str))
+                if ok:
+                    my_subject_id = advert_info_response['params'][0]['subjectId']
+                    logger.info("campaign: {}. check_subject_id: {}".format(
+                        adv_company['company_id'], adv_company['check_subject_id']))
+                    if adv_company['check_subject_id'] \
+                            and priority_subjects is not None \
+                            and my_subject_id != priority_subjects[0]:
+                        error_str = "priority_subjects[0]: {} not equal adverts's subject_id: {}".format(
+                            priority_subjects[0], my_subject_id)
+                        db_facade.log_advert_bid(db, adv_company['company_id'], None, None,
+                                                 None, None, None, 1002,
+                                                 error_str, '{}', '{}',  '{}', 'advert')
+                        db_facade.alarm(
+                            db, adv_company['company_id'], error_str)
+                        logger.warning("Company: {} skipped. Alarm: {}".format(
+                            adv_company['company_id'], error_str))
+                        db_facade.update_last_scan_ts(
+                            db, adv_company['company_id'])
+                        return
+
+                ok, result_code, error_str = wb_requests.save_advert_campaign_by_api(
+                    adv_company['company_id'], adv_company['cpm_token'], decision.targetPrice, adv_company['subject_id'])
+                request_name = "save"
+                if ok:
+                    logger.info('campaign "{}" saved! New price: {}'.format(
+                        adv_company['name'], target_price))
+                    db_facade.update_company(
+                        db, adv_company['company_id'], decision.targetPrice, my_subject_id)
+                else:
+                    logger.warn('could not save campaign: {} - {}'.format(
+                                adv_company['company_id'], adv_company['name']))
+        else:
+            logger.info('already best price and place')
+            decision_str = 'no changes'
+    json_adverts_array_first_five = '{}' if adverts_array is None else json.dumps(
+        adverts_array[:4])
+    json_priority_subjects = '{}' if priority_subjects is None else json.dumps(
+        priority_subjects)
+    db_facade.log_advert_bid(db, adv_company['company_id'], my_price, my_place,
+                             target_price, target_place, decision_str, result_code,
+                             error_str, json_adverts_array_first_five, json_priority_subjects, '{}', request_name)
+    db_facade.update_last_scan_ts(db, adv_company['company_id'])
 
 
 def main():
     logger.info('Service starting...')
     args = parse_arguments()
-    db = db_facade.connect(args)
+    db = db_facade.connect(args)    
 
     while True:
-        asyncio.run(work_iteration(db))
+        asyncio.run(work_iteration(db, args.bid_checker_url))
         time.sleep(2)
 
 

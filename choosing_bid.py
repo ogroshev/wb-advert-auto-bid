@@ -79,3 +79,26 @@ def calcBestPrice(advert_info: AdvertInfo,
         print('warning: target place info not found!')
         d = Decision(current_price != MIN_BID, MIN_BID)
     return d
+
+
+def calcBestPriceV2(bets: dict,
+                  our_advert_id: int,
+                  current_price: int) -> Decision:
+    MIN_BID = 50
+    d = Decision(False, 0)
+
+    if bets['target_place']['advert_id'] == our_advert_id:
+        next_place_price = bets['next_place']['bet']
+        if next_place_price == 0:
+            print('warning: next place price not found!')
+            return Decision(current_price != MIN_BID, MIN_BID)
+        if current_price == (next_place_price + 1):
+            return Decision(False, current_price)
+        else:
+            return Decision(current_price != next_place_price + 1, next_place_price + 1)
+
+    if bets['target_place']['advert_id'] == 0:
+        print('warning: target place info not found!')
+        return Decision(current_price != MIN_BID, MIN_BID)
+
+    return Decision(current_price != (bets['target_place']['bet'] + 1), bets['target_place']['bet'] + 1)
